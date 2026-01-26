@@ -140,8 +140,14 @@ int main(void) {
 
     if (THREADED) {
         xTaskCreate(usb_thread, "TUD", configMINIMAL_STACK_SIZE, NULL, TUD_TASK_PRIO, &tud_taskhandle);
+#if (configNUMBER_OF_CORES > 1)
+        vTaskCoreAffinitySet(tud_taskhandle, (1 << 0));
+#endif
 #if PICO_RP2040
         xTaskCreate(dev_mon, "WDOG", configMINIMAL_STACK_SIZE, NULL, TUD_TASK_PRIO, &mon_taskhandle);
+#if (configNUMBER_OF_CORES > 1)
+        vTaskCoreAffinitySet(mon_taskhandle, (1 << 0));
+#endif
 #endif
         vTaskStartScheduler();
     }
@@ -274,7 +280,11 @@ void tud_mount_cb(void)
     xTaskCreate(dap_thread, "DAP", configMINIMAL_STACK_SIZE, NULL, DAP_TASK_PRIO, &dap_taskhandle);
     /* Autobaud detection using PIO as a frequency counter */
     xTaskCreate(autobaud_thread, "ABR", configMINIMAL_STACK_SIZE, NULL, AUTOBAUD_TASK_PRIO, &autobaud_taskhandle);
+#if(configNUMBER_OF_CORES > 1)
     vTaskCoreAffinitySet(autobaud_taskhandle, (1 << 1));
+    vTaskCoreAffinitySet(dap_taskhandle, (1 << 0));
+    vTaskCoreAffinitySet(uart_taskhandle, (1 << 0));
+#endif
     was_configured = 1;
   }
 }
