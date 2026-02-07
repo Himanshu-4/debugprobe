@@ -148,8 +148,52 @@ void probe_write_mode(void) {
     probe_wait_idle();
 }
 
-void probe_init() {
+probe_protocol_t current_protocol = PROBE_PROTOCOL_SWD;
+
+void probe_init(probe_protocol_t protocol) {
     if (!probe.initted) {
+
+        current_protocol = protocol;
+            
+        if (protocol == PROBE_PROTOCOL_SWD) {
+            // Initialize SWD pins
+            gpio_init(PROBE_PIN_SWCLK);
+            gpio_set_dir(PROBE_PIN_SWCLK, GPIO_OUT);
+            gpio_put(PROBE_PIN_SWCLK, 0);
+            
+            gpio_init(PROBE_PIN_SWDIO);
+            gpio_set_dir(PROBE_PIN_SWDIO, GPIO_OUT);
+            gpio_put(PROBE_PIN_SWDIO, 1);
+            
+        } else if (protocol == PROBE_PROTOCOL_JTAG) {
+            // Initialize JTAG pins
+            gpio_init(PROBE_PIN_TCK);
+            gpio_set_dir(PROBE_PIN_TCK, GPIO_OUT);
+            gpio_put(PROBE_PIN_TCK, 0);
+            
+            gpio_init(PROBE_PIN_TMS);
+            gpio_set_dir(PROBE_PIN_TMS, GPIO_OUT);
+            gpio_put(PROBE_PIN_TMS, 1);
+            
+            gpio_init(PROBE_PIN_TDI);
+            gpio_set_dir(PROBE_PIN_TDI, GPIO_OUT);
+            gpio_put(PROBE_PIN_TDI, 0);
+            
+            gpio_init(PROBE_PIN_TDO);
+            gpio_set_dir(PROBE_PIN_TDO, GPIO_IN);
+            
+            // Optional TRST
+            gpio_init(PROBE_PIN_TRST);
+            gpio_set_dir(PROBE_PIN_TRST, GPIO_OUT);
+            gpio_put(PROBE_PIN_TRST, 1);  // Inactive (active low)
+        }
+        
+        // // Common RESET pin
+        // gpio_init(PROBE_PIN_RESET);
+        // gpio_set_dir(PROBE_PIN_RESET, GPIO_OUT);
+        // gpio_put(PROBE_PIN_RESET, 1);
+
+
         probe_gpio_init();
         uint offset = pio_add_program(pio0, &probe_program);
         probe.offset = offset;
@@ -168,6 +212,17 @@ void probe_init() {
     }
 }
 
+
+void probe_deinit_jtag_pins(void) {
+    // Set all pins to input to avoid conflicts
+    gpio_set_dir(PROBE_PIN_SWCLK, GPIO_IN);
+    gpio_set_dir(PROBE_PIN_SWDIO, GPIO_IN);
+    gpio_set_dir(PROBE_PIN_TMS, GPIO_IN);
+    gpio_set_dir(PROBE_PIN_TDI, GPIO_IN);
+    gpio_set_dir(PROBE_PIN_TDO, GPIO_IN);
+    gpio_set_dir(PROBE_PIN_TRST, GPIO_IN);
+}
+
 void probe_deinit(void)
 {
   if (probe.initted) {
@@ -179,4 +234,5 @@ void probe_deinit(void)
     probe_gpio_deinit();
     probe.initted = 0;
   }
+  probe_deinit_jtag_pins();
 }

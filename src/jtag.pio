@@ -1,0 +1,82 @@
+; jtag.pio - PIO program for JTAG protocol
+; Create new file: src/jtag.pio
+
+.program jtag_shift
+.side_set 1 opt
+
+; Shift data in/out on JTAG interface
+; TDI on OUT pins, TDO on IN pins, TCK on sideset
+; Autopull/autopush enabled, 32-bit shift
+
+.wrap_target
+    out pins, 1     side 0      ; Output TDI bit, TCK low
+    in pins, 1      side 1      ; Sample TDO, TCK high
+.wrap
+
+% c-sdk {
+static inline void jtag_shift_program_init(PIO pio, uint sm, uint offset,
+                                            uint tdi_pin, uint tdo_pin, uint tck_pin) {
+    pio_sm_config c = jtag_shift_program_get_default_config(offset);
+    
+    // Configure TDI as output
+    sm_config_set_out_pins(&c, tdi_pin, 1);
+    pio_gpio_init(pio, tdi_pin);
+    pio_sm_set_consecutive_pindirs(pio, sm, tdi_pin, 1, true);
+    
+    // Configure TDO as input
+    sm_config_set_in_pins(&c, tdo_pin);
+    pio_gpio_init(pio, tdo_pin);
+    pio_sm_set_consecutive_pindirs(pio, sm, tdo_pin, 1, false);
+    
+    // Configure TCK as sideset
+    sm_config_set_sideset_pins(&c, tck_pin);
+    pio_gpio_init(pio, tck_pin);
+    pio_sm_set_consecutive_pindirs(pio, sm, tck_pin, 1, true);
+    
+    // Shift right, autopull/autopush, 32 bits
+    sm_config_set_out_shift(&c, true, true, 32);
+    sm_config_set_in_shift(&c, true, true, 32);
+    
+    // Set clock divider for desired frequency
+    sm_config_set_clkdiv(&c, 1.0f);
+    
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+}
+%}
+
+.program jtag_tms
+.side_set 1
+
+; TMS state machine for TAP navigation
+; TMS on OUT pins, TCK on sideset
+
+.wrap_target
+    out pins, 1     side 0      ; Output TMS bit, TCK low
+    nop             side 1      ; TCK high (latch TMS)
+.wrap
+
+% c-sdk {
+static inline void jtag_tms_program_init(PIO pio, uint sm, uint offset,
+                                          uint tms_pin, uint tck_pin) {
+    pio_sm_config c = jtag_tms_program_get_default_config(offset);
+    
+    // Configure TMS as output
+    sm_config_set_out_pins(&c, tms_pin, 1);
+    pio_gpio_init(pio, tms_pin);
+    pio_sm_set_consecutive_pindirs(pio, sm, tms_pin, 1, true);
+    
+    // Configure TCK as sideset
+    sm_config_set_sideset_pins(&c, tck_pin);
+    pio_gpio_init(pio, tck_pin);
+    pio_sm_set_consecutive_pindirs(pio, sm, tck_pin, 1, true);
+    
+    // Shift right, autopull
+    sm_config_set_out_shift(&c, true, true, 32);
+    
+    sm_config_set_clkdiv(&c, 1.0f);
+    
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+}
+%}
