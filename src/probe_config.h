@@ -66,6 +66,7 @@ do { \
 // TODO tie this up with PICO_BOARD defines in the main SDK
 
 #ifdef DEBUG_ON_PICO 
+#error "DEBUG_ON_PICO should not be defined for probe firmware - this is only for host-side code"
 #include "board_pico_config.h"
 #else
 #include "board_debug_probe_config.h"

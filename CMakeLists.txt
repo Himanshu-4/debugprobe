@@ -27,8 +27,8 @@ add_executable(debugprobe
         src/sw_dp_pio.c
         src/tusb_edpt_handler.c
         src/autobaud.c
-        src/jtag.c
-        src/jtag_dap_override.c
+        # src/jtag.c
+        # src/jtag_dap_override.c
 )
 
 target_sources(debugprobe PRIVATE
