@@ -36,6 +36,8 @@
 
 void probe_set_swclk_freq(uint freq_khz);
 
+extern bool probe_jtag_active;
+
 // Bit counts in the range 1..256
 void probe_write_bits(uint bit_count, uint32_t data_byte);
 uint32_t probe_read_bits(uint bit_count);

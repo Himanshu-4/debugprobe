@@ -107,3 +107,20 @@ target_link_libraries(debugprobe PRIVATE
 pico_set_binary_type(debugprobe copy_to_ram)
 
 pico_add_extra_outputs(debugprobe)
+
+# ---------------------------------------------------------------------------
+# OpenOCD launch target — connects debugprobe (CMSIS-DAP) to an ESP32 via JTAG
+#
+# Usage:  cmake --build build --target openocd_esp32
+#         (keep this running, then attach GDB in a second terminal)
+# ---------------------------------------------------------------------------
+find_program(OPENOCD_EXECUTABLE openocd REQUIRED)
+
+add_custom_target(openocd_esp32
+    COMMAND ${OPENOCD_EXECUTABLE}
+            -f interface/cmsis-dap.cfg
+            -c "adapter speed 5000"
+            -f target/esp32.cfg
+    COMMENT "Launching OpenOCD: debugprobe -> ESP32 JTAG (GDB port 3333, telnet 4444)"
+    USES_TERMINAL
+)

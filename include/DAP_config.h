@@ -302,13 +302,39 @@ of the same I/O port. The following SWDIO I/O Pin functions are provided:
 
 // Configure DAP I/O pins ------------------------------
 
+// Forward declaration for cached_delay defined in sw_dp_pio.c
+extern volatile uint32_t cached_delay;
+
 /** Setup JTAG I/O pins: TCK, TMS, TDI, TDO, nTRST, and nRESET.
 Configures the DAP Hardware I/O pins for JTAG mode:
  - TCK, TMS, TDI, nTRST, nRESET to output mode and set to high level.
  - TDO to input mode.
 */
 __STATIC_INLINE void PORT_JTAG_SETUP (void) {
-  ;
+  probe_deinit();
+  // TCK: output, idle low
+  gpio_init(PROBE_PIN_TCK);
+  gpio_set_dir(PROBE_PIN_TCK, GPIO_OUT);
+  gpio_put(PROBE_PIN_TCK, 0);
+  // TMS: output, idle high
+  gpio_init(PROBE_PIN_TMS);
+  gpio_set_dir(PROBE_PIN_TMS, GPIO_OUT);
+  gpio_put(PROBE_PIN_TMS, 1);
+  // TDI: output, idle high
+  gpio_init(PROBE_PIN_TDI);
+  gpio_set_dir(PROBE_PIN_TDI, GPIO_OUT);
+  gpio_put(PROBE_PIN_TDI, 1);
+  // TDO: input with pull-up
+  gpio_init(PROBE_PIN_TDO);
+  gpio_set_dir(PROBE_PIN_TDO, GPIO_IN);
+  gpio_pull_up(PROBE_PIN_TDO);
+#ifdef PROBE_PIN_TRST
+  gpio_init(PROBE_PIN_TRST);
+  gpio_set_dir(PROBE_PIN_TRST, GPIO_OUT);
+  gpio_put(PROBE_PIN_TRST, 1);  // inactive (active low)
+#endif
+  probe_jtag_active = true;
+  cached_delay = 0;
 }
 
 /** Setup SWD I/O pins: SWCLK, SWDIO, and nRESET.
@@ -316,9 +342,19 @@ Configures the DAP Hardware I/O pins for Serial Wire Debug (SWD) mode:
  - SWCLK, SWDIO, nRESET to output mode and set to default high level.
  - TDI, nTRST to HighZ mode (pins are unused in SWD mode).
 */
-// hack - zap our "stop doing divides everywhere" cache
-extern volatile uint32_t cached_delay;
 __STATIC_INLINE void PORT_SWD_SETUP (void) {
+  if (probe_jtag_active) {
+    // Release JTAG-only pins before PIO claims TCK/TDO back
+    gpio_deinit(PROBE_PIN_TDI);
+    gpio_disable_pulls(PROBE_PIN_TDI);
+    gpio_deinit(PROBE_PIN_TMS);
+    gpio_disable_pulls(PROBE_PIN_TMS);
+#ifdef PROBE_PIN_TRST
+    gpio_deinit(PROBE_PIN_TRST);
+    gpio_disable_pulls(PROBE_PIN_TRST);
+#endif
+    probe_jtag_active = false;
+  }
   probe_init();
   cached_delay = 0;
 }
@@ -328,7 +364,22 @@ Disables the DAP Hardware I/O pins which configures:
  - TCK/SWCLK, TMS/SWDIO, TDI, TDO, nTRST, nRESET to High-Z mode.
 */
 __STATIC_INLINE void PORT_OFF (void) {
-  probe_deinit();
+  probe_deinit();  // stops SWD PIO if active; no-op in JTAG mode
+  if (probe_jtag_active) {
+    gpio_deinit(PROBE_PIN_TCK);
+    gpio_disable_pulls(PROBE_PIN_TCK);
+    gpio_deinit(PROBE_PIN_TDI);
+    gpio_disable_pulls(PROBE_PIN_TDI);
+    gpio_deinit(PROBE_PIN_TDO);
+    gpio_disable_pulls(PROBE_PIN_TDO);
+    gpio_deinit(PROBE_PIN_TMS);
+    gpio_disable_pulls(PROBE_PIN_TMS);
+#ifdef PROBE_PIN_TRST
+    gpio_deinit(PROBE_PIN_TRST);
+    gpio_disable_pulls(PROBE_PIN_TRST);
+#endif
+    probe_jtag_active = false;
+  }
 }
 
 
@@ -338,21 +389,21 @@ __STATIC_INLINE void PORT_OFF (void) {
 \return Current status of the SWCLK/TCK DAP hardware I/O pin.
 */
 __STATIC_FORCEINLINE uint32_t PIN_SWCLK_TCK_IN  (void) {
-  return (0U);
+  return gpio_get(PROBE_PIN_TCK) ? 1U : 0U;
 }
 
 /** SWCLK/TCK I/O pin: Set Output to High.
 Set the SWCLK/TCK DAP hardware I/O pin to high level.
 */
 __STATIC_FORCEINLINE void     PIN_SWCLK_TCK_SET (void) {
-  ;
+  gpio_put(PROBE_PIN_TCK, 1);
 }
 
 /** SWCLK/TCK I/O pin: Set Output to Low.
 Set the SWCLK/TCK DAP hardware I/O pin to low level.
 */
 __STATIC_FORCEINLINE void     PIN_SWCLK_TCK_CLR (void) {
-  ;
+  gpio_put(PROBE_PIN_TCK, 0);
 }
 
 
@@ -362,21 +413,21 @@ __STATIC_FORCEINLINE void     PIN_SWCLK_TCK_CLR (void) {
 \return Current status of the SWDIO/TMS DAP hardware I/O pin.
 */
 __STATIC_FORCEINLINE uint32_t PIN_SWDIO_TMS_IN  (void) {
-  return (0U);
+  return gpio_get(PROBE_PIN_TMS) ? 1U : 0U;
 }
 
 /** SWDIO/TMS I/O pin: Set Output to High.
 Set the SWDIO/TMS DAP hardware I/O pin to high level.
 */
 __STATIC_FORCEINLINE void     PIN_SWDIO_TMS_SET (void) {
-  ;
+  gpio_put(PROBE_PIN_TMS, 1);
 }
 
 /** SWDIO/TMS I/O pin: Set Output to Low.
 Set the SWDIO/TMS DAP hardware I/O pin to low level.
 */
 __STATIC_FORCEINLINE void     PIN_SWDIO_TMS_CLR (void) {
-  ;
+  gpio_put(PROBE_PIN_TMS, 0);
 }
 
 /** SWDIO I/O pin: Get Input (used in SWD mode only).
@@ -423,7 +474,7 @@ __STATIC_FORCEINLINE uint32_t PIN_TDI_IN  (void) {
 \param bit Output value for the TDI DAP hardware I/O pin.
 */
 __STATIC_FORCEINLINE void     PIN_TDI_OUT (uint32_t bit) {
-  ;
+  gpio_put(PROBE_PIN_TDI, bit & 1U);
 }
 
 
@@ -433,7 +484,7 @@ __STATIC_FORCEINLINE void     PIN_TDI_OUT (uint32_t bit) {
 \return Current status of the TDO DAP hardware I/O pin.
 */
 __STATIC_FORCEINLINE uint32_t PIN_TDO_IN  (void) {
-  return (0U);
+  return gpio_get(PROBE_PIN_TDO) ? 1U : 0U;
 }
 
 
@@ -452,7 +503,11 @@ __STATIC_FORCEINLINE uint32_t PIN_nTRST_IN   (void) {
            - 1: release JTAG TRST Test Reset.
 */
 __STATIC_FORCEINLINE void     PIN_nTRST_OUT  (uint32_t bit) {
-  ;
+#ifdef PROBE_PIN_TRST
+  gpio_put(PROBE_PIN_TRST, bit & 1U);
+#else
+  (void)bit;
+#endif
 }
 
 // nRESET Pin I/O------------------------------------------

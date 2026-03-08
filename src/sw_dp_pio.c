@@ -33,6 +33,7 @@
  * Ideally we don't want calls to udiv everywhere... */
 #define MAKE_KHZ(x) (CPU_CLOCK / (2000 * ((x) + 1)))
 volatile uint32_t cached_delay = 0;
+bool probe_jtag_active = false;
 
 // Generate SWJ Sequence
 //   count:  sequence bit count
@@ -42,6 +43,19 @@ volatile uint32_t cached_delay = 0;
 void SWJ_Sequence (uint32_t count, const uint8_t *data) {
   uint32_t bits;
   uint32_t n;
+
+  if (probe_jtag_active) {
+    // JTAG mode: SWD PIO is stopped, bit-bang TMS/TCK via GPIO
+    for (n = 0; n < count; n++) {
+      uint32_t bit = (data[n / 8] >> (n % 8)) & 1U;
+      gpio_put(PROBE_PIN_TMS, bit);
+      PIN_DELAY_SLOW(DAP_Data.clock_delay);
+      gpio_put(PROBE_PIN_TCK, 1);
+      PIN_DELAY_SLOW(DAP_Data.clock_delay);
+      gpio_put(PROBE_PIN_TCK, 0);
+    }
+    return;
+  }
 
   if (DAP_Data.clock_delay != cached_delay) {
     probe_set_swclk_freq(MAKE_KHZ(DAP_Data.clock_delay));
